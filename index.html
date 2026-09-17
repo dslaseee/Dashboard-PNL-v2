@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard Analytics PNL</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse untuk Parsing CSV Cepat -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.min.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased min-h-screen">
+
+  <div class="flex flex-col min-h-screen">
+    <!-- Header -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
+      <div class="container mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-blue-600 rounded-xl shadow-md">
+            <i class="fa-solid fa-chart-line text-2xl"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold tracking-wide">Dashboard Analytics PNL</h1>
+            <p class="text-xs text-slate-400">Analisis Data CSV PNL & Komparasi Selisih</p>
+          </div>
+        </div>
+        
+        <!-- Controls Header -->
+        <div class="flex items-center gap-3">
+          <label class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow cursor-pointer transition flex items-center gap-2">
+            <i class="fa-solid fa-file-csv"></i> Upload CSV
+            <input type="file" id="csvFileInput" accept=".csv" onchange="handleFileUpload(event)" class="hidden">
+          </label>
+          <button onclick="refreshDashboard()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 transition flex items-center gap-2">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Data
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="container mx-auto px-6 py-6 flex-grow space-y-8">
+
+      <!-- Upload Prompt Alert if no data -->
+      <div id="uploadPrompt" class="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
+        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+        </div>
+        <h2 class="text-lg font-bold text-slate-800 mb-1">Belum Ada Data Diumpan</h2>
+        <p class="text-sm text-slate-500 max-w-md mx-auto mb-4">Silakan unggah file CSV data PNL Anda melalui tombol "Upload CSV" di atas untuk menampilkan dashboard analytics.</p>
+      </div>
+
+      <!-- Content Dashboard (Hidden Until File Uploaded) -->
+      <div id="dashboardContent" class="hidden space-y-8">
+
+        <!-- Summary KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <p class="text-xs font-semibold text-slate-400 uppercase">Total Akumulasi SOBIOA</p>
+            <h3 id="cardTotalSobioa" class="text-2xl font-bold text-blue-600 mt-1">Rp 0</h3>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <p class="text-xs font-semibold text-slate-400 uppercase">Total Baris Data</p>
+            <h3 id="cardTotalRows" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <p class="text-xs font-semibold text-slate-400 uppercase">Jumlah Akun Unik</p>
+            <h3 id="cardTotalAccounts" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+          </div>
+        </div>
+
+        <!-- SECTION 1: DASHBOARD AKUMULASI -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div class="border-b pb-3 mb-4">
+            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-chart-area text-blue-600"></i> Dashboard Akumulasi Data
+            </h2>
+            <p class="text-xs text-slate-500">Grafik total nilai SOBIOA secara akumulatif berdasarkan Bulan dan Tahun</p>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="chartAccumulated"></canvas>
+          </div>
+        </section>
+
+        <!-- SECTION 2: DASHBOARD PER-BULAN PER NAMA AKUN -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-3 mb-6">
+            <div>
+              <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-chart-column text-emerald-600"></i> Dashboard Monthly per Nama Akun
+              </h2>
+              <p class="text-xs text-slate-500">Visualisasi tren SOBIOA per bulan berdasarkan Nama Akun terpilih</p>
+            </div>
+            <div class="w-full md:w-80">
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Filter Nama Akun</label>
+              <select id="selectNamaAkun" onchange="renderAccountChart()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"></select>
+            </div>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="chartAccountMonthly"></canvas>
+          </div>
+        </section>
+
+        <!-- SECTION 3: KOMPARASI & TABEL SELISIH -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-3 mb-6">
+            <div>
+              <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-scale-balanced text-indigo-600"></i> Komparasi & Selisih Periode
+              </h2>
+              <p class="text-xs text-slate-500">Perhitungan kolom Selisih (SOBIOA Periode Akhir - SOBIOA Periode Awal)</p>
+            </div>
+            <button onclick="downloadCSV()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow transition flex items-center gap-2">
+              <i class="fa-solid fa-file-csv"></i> Download Hasil (CSV)
+            </button>
+          </div>
+
+          <!-- 4 Filter Controls -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Bulan Awal</label>
+              <select id="filterBulanAwal" class="w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Tahun Awal</label>
+              <select id="filterTahunAwal" class="w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Bulan Akhir</label>
+              <select id="filterBulanAkhir" class="w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Tahun Akhir</label>
+              <select id="filterTahunAkhir" class="w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+          </div>
+
+          <div class="flex justify-end mb-6">
+            <button onclick="applyComparisonFilter()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg shadow transition flex items-center gap-2">
+              <i class="fa-solid fa-magnifying-glass"></i> Terapkan Filter Komparasi
+            </button>
+          </div>
+
+          <!-- Tabel Top 10 Selisih Tertinggi -->
+          <div class="space-y-6">
+            <div>
+              <h3 class="text-sm font-bold text-emerald-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-arrow-trend-up"></i> Top 10 Selisih Tertinggi (Kenaikan)
+              </h3>
+              <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                  <thead class="bg-emerald-50 text-emerald-900 font-semibold text-xs uppercase border-b border-slate-200">
+                    <tr>
+                      <th class="p-3">Nama Akun</th>
+                      <th class="p-3 text-right">SOBIOA (Periode Awal)</th>
+                      <th class="p-3 text-right">SOBIOA (Periode Akhir)</th>
+                      <th class="p-3 text-right">Selisih</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tableTopHighest" class="divide-y divide-slate-100 text-slate-700"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tabel Top 10 Selisih Terendah -->
+            <div>
+              <h3 class="text-sm font-bold text-red-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-arrow-trend-down"></i> Top 10 Selisih Terendah (Penurunan)
+              </h3>
+              <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                  <thead class="bg-red-50 text-red-900 font-semibold text-xs uppercase border-b border-slate-200">
+                    <tr>
+                      <th class="p-3">Nama Akun</th>
+                      <th class="p-3 text-right">SOBIOA (Periode Awal)</th>
+                      <th class="p-3 text-right">SOBIOA (Periode Akhir)</th>
+                      <th class="p-3 text-right">Selisih</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tableTopLowest" class="divide-y divide-slate-100 text-slate-700"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Client JavaScript Logic -->
+  <script>
+    let rawCSVData = [];
+    let lastComparisonResult = [];
+    let chartAccumulatedInstance = null;
+    let chartAccountMonthlyInstance = null;
+
+    const listBulan = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      Swal.fire({
+        title: 'Membaca File CSV...',
+        text: 'Sedang memproses data, mohon tunggu...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+      });
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+        complete: function(results) {
+          rawCSVData = results.data;
+          Swal.close();
+
+          if (rawCSVData.length === 0) {
+            Swal.fire('File Kosong', 'File CSV tidak berisi data.', 'warning');
+            return;
+          }
+
+          document.getElementById('uploadPrompt').classList.add('hidden');
+          document.getElementById('dashboardContent').classList.remove('hidden');
+
+          populateFilterDropdowns();
+          renderAccumulatedDashboard();
+          renderAccountChart();
+          applyComparisonFilter();
+
+          Swal.fire('Sukses!', `Berhasil memuat ${rawCSVData.length.toLocaleString('id-ID')} baris data.`, 'success');
+        },
+        error: function(err) {
+          Swal.fire('Gagal Membaca File', err.message, 'error');
+        }
+      });
+    }
+
+    function refreshDashboard() {
+      if (rawCSVData.length === 0) {
+        Swal.fire('Info', 'Belum ada data file CSV yang diunggah.', 'info');
+        return;
+      }
+      renderAccumulatedDashboard();
+      renderAccountChart();
+      applyComparisonFilter();
+      Swal.fire({ icon: 'success', title: 'Data Diperbarui', timer: 1200, showConfirmButton: false });
+    }
+
+    function parseNum(val) {
+      if (val === null || val === undefined) return 0;
+      let num = parseFloat(val.toString().replace(/,/g, '').trim());
+      return isNaN(num) ? 0 : num;
+    }
+
+    function formatCurrency(val) {
+      return 'Rp ' + parseNum(val).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function populateFilterDropdowns() {
+      const namaAkunSet = new Set();
+      const tahunSet = new Set();
+
+      rawCSVData.forEach(item => {
+        const akunKey = item['NAMA AKUN'] || item['Nama Akun'] || item['nama_akun'];
+        const tahunKey = item['Tahun'] || item['TAHUN'] || item['tahun'];
+
+        if (akunKey) namaAkunSet.add(akunKey.toString().trim());
+        if (tahunKey) tahunSet.add(tahunKey.toString().trim());
+      });
+
+      // Populate Nama Akun
+      const selectNamaAkun = document.getElementById('selectNamaAkun');
+      selectNamaAkun.innerHTML = '';
+      Array.from(namaAkunSet).sort().forEach(akun => {
+        selectNamaAkun.innerHTML += `<option value="${akun}">${akun}</option>`;
+      });
+
+      // Populate Month Dropdowns
+      const bAwal = document.getElementById('filterBulanAwal');
+      const bAkhir = document.getElementById('filterBulanAkhir');
+      bAwal.innerHTML = '';
+      bAkhir.innerHTML = '';
+      listBulan.forEach(b => {
+        bAwal.innerHTML += `<option value="${b}">${b}</option>`;
+        bAkhir.innerHTML += `<option value="${b}">${b}</option>`;
+      });
+
+      // Populate Year Dropdowns
+      const tAwal = document.getElementById('filterTahunAwal');
+      const tAkhir = document.getElementById('filterTahunAkhir');
+      tAwal.innerHTML = '';
+      tAkhir.innerHTML = '';
+      const sortedTahun = Array.from(tahunSet).sort();
+      sortedTahun.forEach(t => {
+        tAwal.innerHTML += `<option value="${t}">${t}</option>`;
+        tAkhir.innerHTML += `<option value="${t}">${t}</option>`;
+      });
+
+      if (listBulan.length > 0) {
+        bAwal.value = listBulan[0];
+        bAkhir.value = listBulan[listBulan.length - 1];
+      }
+      if (sortedTahun.length > 0) {
+        tAwal.value = sortedTahun[0];
+        tAkhir.value = sortedTahun[sortedTahun.length - 1];
+      }
+    }
+
+    // SECTION 1: CHART AKUMULASI
+    function renderAccumulatedDashboard() {
+      let totalSobioa = 0;
+      const accountSet = new Set();
+      const periodMap = {};
+
+      rawCSVData.forEach(item => {
+        const bulan = item['Bulan'] || item['BULAN'] || item['bulan'] || 'N/A';
+        const tahun = item['Tahun'] || item['TAHUN'] || item['tahun'] || 'N/A';
+        const akun = item['NAMA AKUN'] || item['Nama Akun'] || item['nama_akun'];
+        const sobioa = parseNum(item['SOBIOA'] || item['sobioa']);
+
+        totalSobioa += sobioa;
+        if (akun) accountSet.add(akun.toString().trim());
+
+        const key = `${tahun} - ${bulan}`;
+        periodMap[key] = (periodMap[key] || 0) + sobioa;
+      });
+
+      document.getElementById('cardTotalSobioa').innerText = formatCurrency(totalSobioa);
+      document.getElementById('cardTotalRows').innerText = rawCSVData.length.toLocaleString('id-ID');
+      document.getElementById('cardTotalAccounts').innerText = accountSet.size.toLocaleString('id-ID');
+
+      const labels = Object.keys(periodMap);
+      const values = Object.values(periodMap);
+
+      if (chartAccumulatedInstance) chartAccumulatedInstance.destroy();
+
+      const ctx = document.getElementById('chartAccumulated').getContext('2d');
+      chartAccumulatedInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Akumulasi SOBIOA',
+            data: values,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { ticks: { callback: (v) => 'Rp ' + (v / 1e6).toFixed(0) + 'M' } }
+          }
+        }
+      });
+    }
+
+    // SECTION 2: CHART PER NAMA AKUN
+    function renderAccountChart() {
+      const selectedAkun = document.getElementById('selectNamaAkun').value;
+      if (!selectedAkun) return;
+
+      const monthlyMap = {};
+      listBulan.forEach(b => { monthlyMap[b] = 0; });
+
+      rawCSVData.forEach(item => {
+        const akun = item['NAMA AKUN'] || item['Nama Akun'] || item['nama_akun'];
+        const bulan = item['Bulan'] || item['BULAN'] || item['bulan'];
+        const sobioa = parseNum(item['SOBIOA'] || item['sobioa']);
+
+        if (akun && akun.toString().trim() === selectedAkun && bulan) {
+          monthlyMap[bulan] = (monthlyMap[bulan] || 0) + sobioa;
+        }
+      });
+
+      const labels = listBulan;
+      const values = listBulan.map(b => monthlyMap[b] || 0);
+
+      if (chartAccountMonthlyInstance) chartAccountMonthlyInstance.destroy();
+
+      const ctx = document.getElementById('chartAccountMonthly').getContext('2d');
+      chartAccountMonthlyInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: `SOBIOA (${selectedAkun})`,
+            data: values,
+            backgroundColor: '#10b981',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: true } },
+          scales: {
+            y: { ticks: { callback: (v) => 'Rp ' + (v / 1e6).toFixed(0) + 'M' } }
+          }
+        }
+      });
+    }
+
+    // SECTION 3: KOMPARASI & SELISIH
+    function applyComparisonFilter() {
+      const bAwal = document.getElementById('filterBulanAwal').value;
+      const tAwal = document.getElementById('filterTahunAwal').value;
+      const bAkhir = document.getElementById('filterBulanAkhir').value;
+      const tAkhir = document.getElementById('filterTahunAkhir').value;
+
+      const mapAwal = {};
+      const mapAkhir = {};
+      const allAccounts = new Set();
+
+      rawCSVData.forEach(item => {
+        const akun = item['NAMA AKUN'] || item['Nama Akun'] || item['nama_akun'];
+        const bulan = item['Bulan'] || item['BULAN'] || item['bulan'];
+        const tahun = item['Tahun'] || item['TAHUN'] || item['tahun'];
+        const sobioa = parseNum(item['SOBIOA'] || item['sobioa']);
+
+        if (!akun) return;
+        const cleanAkun = akun.toString().trim();
+        allAccounts.add(cleanAkun);
+
+        const isAwal = (bulan === bAwal && tahun.toString() === tAwal);
+        const isAkhir = (bulan === bAkhir && tahun.toString() === tAkhir);
+
+        if (isAwal) {
+          mapAwal[cleanAkun] = (mapAwal[cleanAkun] || 0) + sobioa;
+        }
+        if (isAkhir) {
+          mapAkhir[cleanAkun] = (mapAkhir[cleanAkun] || 0) + sobioa;
+        }
+      });
+
+      let results = [];
+      allAccounts.forEach(akun => {
+        const valAwal = mapAwal[akun] || 0;
+        const valAkhir = mapAkhir[akun] || 0;
+        const selisih = valAkhir - valAwal;
+        results.push({
+          nama_akun: akun,
+          sobioaAwal: valAwal,
+          sobioaAkhir: valAkhir,
+          selisih: selisih
+        });
+      });
+
+      lastComparisonResult = results;
+
+      // Sort Descending (Highest Difference)
+      const sortedHighest = [...results].sort((a, b) => b.selisih - a.selisih).slice(0, 10);
+      renderTable('tableTopHighest', sortedHighest);
+
+      // Sort Ascending (Lowest Difference)
+      const sortedLowest = [...results].sort((a, b) => a.selisih - b.selisih).slice(0, 10);
+      renderTable('tableTopLowest', sortedLowest);
+    }
+
+    function renderTable(elementId, rows) {
+      const tbody = document.getElementById(elementId);
+      tbody.innerHTML = '';
+
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-400">Tidak ada data ditemukan.</td></tr>';
+        return;
+      }
+
+      rows.forEach(r => {
+        const badgeColor = r.selisih >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold';
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+            <td class="p-3 font-medium">${r.nama_akun}</td>
+            <td class="p-3 text-right font-mono">${formatCurrency(r.sobioaAwal)}</td>
+            <td class="p-3 text-right font-mono">${formatCurrency(r.sobioaAkhir)}</td>
+            <td class="p-3 text-right font-mono ${badgeColor}">${formatCurrency(r.selisih)}</td>
+          </tr>`;
+      });
+    }
+
+    function downloadCSV() {
+      if (!lastComparisonResult || lastComparisonResult.length === 0) {
+        Swal.fire('Peringatan', 'Tidak ada data komparasi untuk diunduh.', 'warning');
+        return;
+      }
+
+      let csvContent = "\uFEFFNama Akun,SOBIOA (Awal),SOBIOA (Akhir),Selisih\n";
+      lastComparisonResult.forEach(row => {
+        let cleanAkun = '"' + row.nama_akun.replace(/"/g, '""') + '"';
+        csvContent += `${cleanAkun},${row.sobioaAwal},${row.sobioaAkhir},${row.selisih}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Komparasi_PNL_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
